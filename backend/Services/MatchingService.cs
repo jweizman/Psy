@@ -24,7 +24,7 @@ public class MatchingService
         if (!_claude.IsConfigured)
         {
             return new ChatResponse(
-                "Le service de chat n'est pas configuré (clé API Anthropic manquante). Contactez l'administrateur.",
+                "The chat service is not configured (Anthropic API key missing). Please contact the administrator.",
                 "done", null, null);
         }
 
@@ -43,13 +43,14 @@ public class MatchingService
     private async Task<ChatResponse> MirrorAsync(List<ChatMessage> history, CancellationToken ct)
     {
         const string system = """
-            Tu es l'assistant d'accueil d'une plateforme d'aide psychologique.
-            Ton rôle à cette étape est UNIQUEMENT de REFORMULER la problématique de l'utilisateur
-            en une phrase claire, sans jargon ni contexte superflu, puis de demander confirmation.
-            Style : chaleureux, sobre, en français.
-            Format OBLIGATOIRE :
-            "Si je comprends bien, vous traversez : <reformulation courte>. Est-ce que j'ai bien saisi ?"
-            N'ajoute rien d'autre. Ne donne pas de conseil. Ne propose pas encore de psychologue.
+            You are the intake assistant for a psychological-support platform.
+            At this step your ONLY job is to MIRROR the user's concern: rephrase it
+            as a single clear sentence, stripped of jargon and extraneous context,
+            then ask for confirmation.
+            Style: warm, concise, in English.
+            REQUIRED format:
+            "If I understand correctly, you are going through: <short rephrasing>. Did I get that right?"
+            Do not add anything else. Do not give advice. Do not suggest a psychologist yet.
             """;
 
         var msgs = history.Select(m => (m.Role, m.Content));
@@ -74,7 +75,7 @@ public class MatchingService
         var intent = await ClassifyYesNoAsync(lastUser, ct);
         if (intent == "no")
             return new ChatResponse(
-                "Très bien, prenez soin de vous. Revenez quand vous le souhaitez.",
+                "Alright, take care of yourself. Come back whenever you like.",
                 "done", null, null);
 
         return await MatchAsync(history, ct);
@@ -102,7 +103,7 @@ public class MatchingService
         if (psys.Count == 0)
         {
             return new ChatResponse(
-                "Nous n'avons personne de disponible pour le moment. Souhaitez-vous préciser votre besoin pour qu'on puisse chercher plus largement ?",
+                "No one is available at the moment. Would you like to add more detail so we can look more broadly?",
                 "awaiting_followup", null, null);
         }
 
@@ -115,21 +116,21 @@ public class MatchingService
         }
 
         var system = $$"""
-            Tu es un assistant de matching pour une plateforme de psychologie.
-            Voici la liste des psychologues DISPONIBLES AUJOURD'HUI :
+            You are a matching assistant for a psychology platform.
+            Here is the list of psychologists AVAILABLE TODAY:
 
             {{catalog}}
 
-            En te basant UNIQUEMENT sur la problématique de l'utilisateur et les bios/compétences
-            ci-dessus, détermine s'il y a un bon match.
+            Based ONLY on the user's concern and the bios/skills above,
+            decide whether there is a good match.
 
-            Réponds STRICTEMENT en JSON valide, sans texte autour, avec la forme :
-            {"match_id": <int ou null>, "reasoning": "<1-2 phrases en français expliquant le choix, adressé à l'utilisateur>"}
+            Respond STRICTLY as valid JSON, with no surrounding text, in this shape:
+            {"match_id": <int or null>, "reasoning": "<1-2 sentences in English explaining the choice, addressed to the user>"}
 
-            Règles :
-            - match_id = null si AUCUN psychologue ne couvre raisonnablement la problématique.
-            - Ne force jamais un match si les bios ne contiennent rien de pertinent.
-            - reasoning : tutoie/vouvoie selon le ton de l'échange ; reste chaleureux, concret, bref.
+            Rules:
+            - match_id = null if NO psychologist reasonably covers the concern.
+            - Never force a match when the bios contain nothing relevant.
+            - reasoning: warm, concrete, brief; address the user in the second person.
             """;
 
         var msgs = history.Select(m => (m.Role, m.Content));
@@ -160,14 +161,14 @@ public class MatchingService
         {
             var p = psys.First(x => x.Id == id);
             var reply = string.IsNullOrWhiteSpace(reasoning)
-                ? $"Je vous recommande {p.Name} ({p.Title})."
+                ? $"I'd recommend {p.Name} ({p.Title})."
                 : reasoning;
             return new ChatResponse(reply, "done", id, reasoning);
         }
 
         var msg = string.IsNullOrWhiteSpace(reasoning)
-            ? "Je n'ai personne qui corresponde parfaitement aujourd'hui. Voulez-vous ajouter des précisions ?"
-            : reasoning + " Voulez-vous ajouter des précisions à votre demande ?";
+            ? "I don't have anyone who fits perfectly today. Would you like to add more detail?"
+            : reasoning + " Would you like to add more detail to your request?";
         return new ChatResponse(msg, "awaiting_followup", null, reasoning);
     }
 }

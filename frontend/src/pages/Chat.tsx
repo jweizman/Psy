@@ -8,7 +8,7 @@ export default function Chat() {
     {
       role: "assistant",
       content:
-        "Bonjour. Racontez-moi, en quelques mots, ce qui vous amène aujourd'hui.",
+        "Hi there. In a few words, tell me what brings you here today.",
     },
   ]);
   const [phase, setPhase] = useState<ChatPhase>("initial");
@@ -57,7 +57,7 @@ export default function Chat() {
         {
           role: "assistant",
           content:
-            "Désolé, une erreur est survenue. Vérifiez que le serveur est lancé et que la clé API est configurée.",
+            "Sorry, something went wrong. Please check that the server is running and that the API key is configured.",
         },
       ]);
     } finally {
@@ -117,7 +117,7 @@ export default function Chat() {
         <div className="max-w-lg mx-auto px-6 py-3 flex gap-2 items-center">
           <input
             className="flex-1 h-12 px-4 bg-surface-container-highest rounded-xl outline-none focus:ring-2 focus:ring-primary/40 text-on-surface placeholder:text-on-surface-variant/50"
-            placeholder={phase === "done" ? "Session terminée" : "Votre message…"}
+            placeholder={phase === "done" ? "Session ended" : "Your message…"}
             value={input}
             disabled={phase === "done" || loading}
             onChange={(e) => setInput(e.target.value)}
