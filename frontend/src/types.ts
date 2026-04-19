@@ -55,3 +55,10 @@ export interface SkillIcon {
   name: string;
   icon: string;
 }
+
+export interface Sentiment {
+  label: "positive" | "neutral" | "negative";
+  intensity: number;
+  emotions: string[];
+  note: string;
+}

@@ -4,6 +4,7 @@ import type {
   ChatResponse,
   Psychologist,
   Review,
+  Sentiment,
   SkillIcon,
   Slot,
 } from "./types";
@@ -71,5 +72,11 @@ export const api = {
     req<ChatResponse>("/api/chat", {
       method: "POST",
       body: JSON.stringify({ history, phase }),
+    }),
+
+  sentiment: (text: string) =>
+    req<Sentiment>("/api/sentiment", {
+      method: "POST",
+      body: JSON.stringify({ text }),
     }),
 };

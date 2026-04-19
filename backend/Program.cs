@@ -10,6 +10,7 @@ builder.Services.AddDbContext<AppDbContext>(o =>
 
 builder.Services.AddHttpClient<ClaudeClient>();
 builder.Services.AddScoped<MatchingService>();
+builder.Services.AddScoped<SentimentService>();
 
 builder.Services.AddCors(o => o.AddDefaultPolicy(p =>
     p.WithOrigins("http://localhost:5173", "http://127.0.0.1:5173")
@@ -246,6 +247,19 @@ api.MapPost("/chat", async (ChatRequest req, MatchingService svc, CancellationTo
     try
     {
         var res = await svc.ProcessAsync(req, ct);
+        return Results.Ok(res);
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem(ex.Message);
+    }
+});
+
+api.MapPost("/sentiment", async (SentimentRequest req, SentimentService svc, CancellationToken ct) =>
+{
+    try
+    {
+        var res = await svc.AnalyzeAsync(req.Text ?? "", ct);
         return Results.Ok(res);
     }
     catch (Exception ex)

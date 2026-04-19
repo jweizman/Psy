@@ -1,14 +1,21 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { api } from "../api";
-import type { ChatMessage, ChatPhase, Psychologist } from "../types";
+import type {
+  ChatMessage,
+  ChatPhase,
+  Psychologist,
+  Sentiment,
+} from "../types";
+import { useSpeech } from "../useSpeech";
+
+type EnrichedMessage = ChatMessage & { sentiment?: Sentiment };
 
 export default function Chat() {
-  const [history, setHistory] = useState<ChatMessage[]>([
+  const [history, setHistory] = useState<EnrichedMessage[]>([
     {
       role: "assistant",
-      content:
-        "Hi there. In a few words, tell me what brings you here today.",
+      content: "Hi there. In a few words, tell me what brings you here today.",
     },
   ]);
   const [phase, setPhase] = useState<ChatPhase>("initial");
@@ -18,6 +25,7 @@ export default function Chat() {
   const endRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
   const initialSentRef = useRef(false);
+  const speech = useSpeech("en-US");
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -33,15 +41,49 @@ export default function Chat() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state]);
 
+  useEffect(() => {
+    if (speech.transcript) {
+      setInput((prev) =>
+        prev
+          ? prev.trimEnd() + " " + speech.transcript
+          : speech.transcript,
+      );
+      speech.reset();
+    }
+  }, [speech.transcript, speech]);
+
   async function sendText(text: string) {
     const t = text.trim();
     if (!t || loading || phase === "done") return;
-    const nextHistory: ChatMessage[] = [...history, { role: "user", content: t }];
+
+    const userMsg: EnrichedMessage = { role: "user", content: t };
+    const nextHistory: EnrichedMessage[] = [...history, userMsg];
+    const userIndex = nextHistory.length - 1;
     setHistory(nextHistory);
     setLoading(true);
+
+    const sentimentPromise = api
+      .sentiment(t)
+      .then((s) => {
+        setHistory((prev) => {
+          const copy = [...prev];
+          if (copy[userIndex] && copy[userIndex].role === "user") {
+            copy[userIndex] = { ...copy[userIndex], sentiment: s };
+          }
+          return copy;
+        });
+      })
+      .catch(() => {});
+
     try {
-      const res = await api.chat(nextHistory, phase);
-      setHistory([...nextHistory, { role: "assistant", content: res.reply }]);
+      const res = await api.chat(
+        nextHistory.map(({ role, content }) => ({ role, content })),
+        phase,
+      );
+      setHistory((prev) => [
+        ...prev,
+        { role: "assistant", content: res.reply },
+      ]);
       setPhase(res.phase);
       if (res.matchedPsychologistId) {
         try {
@@ -52,8 +94,8 @@ export default function Chat() {
         }
       }
     } catch {
-      setHistory([
-        ...nextHistory,
+      setHistory((prev) => [
+        ...prev,
         {
           role: "assistant",
           content:
@@ -62,13 +104,20 @@ export default function Chat() {
       ]);
     } finally {
       setLoading(false);
+      await sentimentPromise;
     }
   }
 
   async function send() {
     const text = input;
     setInput("");
+    if (speech.listening) speech.stop();
     await sendText(text);
+  }
+
+  function toggleMic() {
+    if (speech.listening) speech.stop();
+    else speech.start();
   }
 
   return (
@@ -84,11 +133,23 @@ export default function Chat() {
         </div>
       </header>
 
-      <main className="pt-20 pb-32 max-w-lg mx-auto px-6 space-y-3">
+      <main className="pt-20 pb-36 max-w-lg mx-auto px-6 space-y-3">
         {history.map((m, i) => (
-          <Bubble key={i} role={m.role} content={m.content} />
+          <Bubble
+            key={i}
+            role={m.role}
+            content={m.content}
+            sentiment={m.sentiment}
+          />
         ))}
         {loading && <Bubble role="assistant" content="…" />}
+        {speech.listening && speech.interim && (
+          <Bubble
+            role="user"
+            content={`🎙 ${speech.interim}`}
+            faded
+          />
+        )}
         {match && (
           <div className="bg-surface-container-lowest p-5 rounded-xl flex gap-4 items-center mt-4 shadow-[0_10px_30px_rgba(49,51,47,0.06)]">
             {match.photoUrl && (
@@ -118,9 +179,35 @@ export default function Chat() {
 
       <div className="fixed bottom-20 w-full z-40 bg-[#fbf9f5]/80 backdrop-blur-xl">
         <div className="max-w-lg mx-auto px-6 py-3 flex gap-2 items-center">
+          {speech.supported && (
+            <button
+              onClick={toggleMic}
+              disabled={phase === "done" || loading}
+              title={speech.listening ? "Stop recording" : "Speak your message"}
+              className={
+                "w-12 h-12 rounded-full flex items-center justify-center transition-colors disabled:opacity-40 " +
+                (speech.listening
+                  ? "bg-error text-on-error animate-pulse"
+                  : "bg-surface-container-high text-primary")
+              }
+            >
+              <span
+                className="material-symbols-outlined"
+                style={{ fontVariationSettings: "'FILL' 1" }}
+              >
+                {speech.listening ? "stop" : "mic"}
+              </span>
+            </button>
+          )}
           <input
             className="flex-1 h-12 px-4 bg-surface-container-highest rounded-xl outline-none focus:ring-2 focus:ring-primary/40 text-on-surface placeholder:text-on-surface-variant/50"
-            placeholder={phase === "done" ? "Session ended" : "Your message…"}
+            placeholder={
+              speech.listening
+                ? "Listening…"
+                : phase === "done"
+                  ? "Session ended"
+                  : "Your message…"
+            }
             value={input}
             disabled={phase === "done" || loading}
             onChange={(e) => setInput(e.target.value)}
@@ -136,25 +223,75 @@ export default function Chat() {
             <span className="material-symbols-outlined">send</span>
           </button>
         </div>
+        {speech.error && (
+          <div className="max-w-lg mx-auto px-6 pb-2 text-xs text-error">
+            Mic error: {speech.error}
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-function Bubble({ role, content }: { role: "user" | "assistant"; content: string }) {
+function Bubble({
+  role,
+  content,
+  sentiment,
+  faded,
+}: {
+  role: "user" | "assistant";
+  content: string;
+  sentiment?: Sentiment;
+  faded?: boolean;
+}) {
   const mine = role === "user";
   return (
-    <div className={"flex " + (mine ? "justify-end" : "justify-start")}>
+    <div
+      className={
+        "flex flex-col " + (mine ? "items-end" : "items-start")
+      }
+    >
       <div
         className={
           "max-w-[85%] px-4 py-3 rounded-2xl font-body text-sm leading-relaxed " +
           (mine
             ? "bg-primary text-on-primary rounded-br-sm"
-            : "bg-surface-container-high text-on-surface rounded-bl-sm")
+            : "bg-surface-container-high text-on-surface rounded-bl-sm") +
+          (faded ? " opacity-60 italic" : "")
         }
       >
         {content}
       </div>
+      {sentiment && <SentimentBadge s={sentiment} />}
+    </div>
+  );
+}
+
+function SentimentBadge({ s }: { s: Sentiment }) {
+  const emoji =
+    s.label === "negative" ? "🌧" : s.label === "positive" ? "☀️" : "🌤";
+  const tone =
+    s.label === "negative"
+      ? "bg-error-container text-on-error-container"
+      : s.label === "positive"
+        ? "bg-secondary-container text-on-secondary-container"
+        : "bg-surface-container-high text-on-surface";
+  return (
+    <div
+      className={
+        "mt-1 px-2.5 py-1 rounded-full text-[11px] font-semibold flex items-center gap-1.5 " +
+        tone
+      }
+      title={s.note || undefined}
+    >
+      <span>{emoji}</span>
+      <span className="uppercase tracking-wide">{s.label}</span>
+      {s.intensity > 0 && <span className="opacity-70">· {s.intensity}/5</span>}
+      {s.emotions.length > 0 && (
+        <span className="opacity-80 normal-case font-medium">
+          · {s.emotions.slice(0, 2).join(", ")}
+        </span>
+      )}
     </div>
   );
 }

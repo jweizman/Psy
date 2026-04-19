@@ -65,3 +65,5 @@ public record SlotInput(
 public record SkillIconDto(int Id, string Name, string Icon);
 
 public record SkillIconInput(string Name, string Icon);
+
+public record SentimentRequest(string Text);
