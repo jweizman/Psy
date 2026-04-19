@@ -31,3 +31,27 @@ export interface ChatResponse {
   matchedPsychologistId: number | null;
   reasoning: string | null;
 }
+
+export interface Review {
+  id: number;
+  psychologistId: number;
+  author: string;
+  initials: string;
+  rating: number;
+  text: string;
+  createdAt: string;
+}
+
+export interface Slot {
+  id: number;
+  psychologistId: number;
+  startUtc: string;
+  durationMinutes: number;
+  booked: boolean;
+}
+
+export interface SkillIcon {
+  id: number;
+  name: string;
+  icon: string;
+}

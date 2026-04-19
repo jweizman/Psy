@@ -1,4 +1,12 @@
-import type { ChatMessage, ChatPhase, ChatResponse, Psychologist } from "./types";
+import type {
+  ChatMessage,
+  ChatPhase,
+  ChatResponse,
+  Psychologist,
+  Review,
+  SkillIcon,
+  Slot,
+} from "./types";
 
 const BASE =
   (import.meta.env.VITE_API_URL as string | undefined) ?? "http://localhost:5080";
@@ -26,6 +34,39 @@ export const api = {
     }),
   deletePsychologist: (id: number) =>
     req<void>(`/api/psychologists/${id}`, { method: "DELETE" }),
+
+  listReviews: (id: number) => req<Review[]>(`/api/psychologists/${id}/reviews`),
+  createReview: (
+    id: number,
+    input: { author: string; initials?: string; rating: number; text: string },
+  ) =>
+    req<Review>(`/api/psychologists/${id}/reviews`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  deleteReview: (id: number) =>
+    req<void>(`/api/reviews/${id}`, { method: "DELETE" }),
+
+  listSlots: (id: number) => req<Slot[]>(`/api/psychologists/${id}/slots`),
+  createSlot: (
+    id: number,
+    input: { startUtc: string; durationMinutes: number; booked: boolean },
+  ) =>
+    req<Slot>(`/api/psychologists/${id}/slots`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  deleteSlot: (id: number) => req<void>(`/api/slots/${id}`, { method: "DELETE" }),
+
+  listSkillIcons: () => req<SkillIcon[]>("/api/skill-icons"),
+  upsertSkillIcon: (input: { name: string; icon: string }) =>
+    req<SkillIcon>("/api/skill-icons", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  deleteSkillIcon: (id: number) =>
+    req<void>(`/api/skill-icons/${id}`, { method: "DELETE" }),
+
   chat: (history: ChatMessage[], phase: ChatPhase) =>
     req<ChatResponse>("/api/chat", {
       method: "POST",

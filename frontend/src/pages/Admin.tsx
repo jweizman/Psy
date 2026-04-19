@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
-import type { Psychologist } from "../types";
+import type { Psychologist, Review, SkillIcon, Slot } from "../types";
 
 type Form = Omit<Psychologist, "id">;
 
@@ -187,7 +187,7 @@ export default function Admin() {
                 }
               />
             </Field>
-            <Field label="Reviews">
+            <Field label="Reviews count">
               <input
                 type="number"
                 min="0"
@@ -200,7 +200,7 @@ export default function Admin() {
             </Field>
           </div>
 
-          <Field label="Next available">
+          <Field label="Next available (display)">
             <input
               className="input"
               placeholder="e.g. 14:00"
@@ -247,8 +247,13 @@ export default function Admin() {
           </div>
         </section>
 
+        {editingId !== null && <ReviewsManager practitionerId={editingId} />}
+        {editingId !== null && <SlotsManager practitionerId={editingId} />}
+
         <section className="space-y-3">
-          <h2 className="font-headline font-bold text-xl">All practitioners ({list.length})</h2>
+          <h2 className="font-headline font-bold text-xl">
+            All practitioners ({list.length})
+          </h2>
           {loading && <div className="text-sm text-on-surface-variant">Loading…</div>}
           {list.map((p) => (
             <div
@@ -277,6 +282,8 @@ export default function Admin() {
             </div>
           ))}
         </section>
+
+        <SkillIconsManager />
       </main>
 
       <style>{`
@@ -309,5 +316,321 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <span className="block text-xs font-semibold text-on-surface-variant mb-1">{label}</span>
       {children}
     </label>
+  );
+}
+
+function ReviewsManager({ practitionerId }: { practitionerId: number }) {
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [author, setAuthor] = useState("");
+  const [rating, setRating] = useState(5);
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function refresh() {
+    setReviews(await api.listReviews(practitionerId));
+  }
+  useEffect(() => {
+    refresh();
+  }, [practitionerId]);
+
+  async function add() {
+    if (!author.trim() || !text.trim()) return;
+    setBusy(true);
+    try {
+      await api.createReview(practitionerId, { author, rating, text });
+      setAuthor("");
+      setText("");
+      setRating(5);
+      await refresh();
+    } catch (e) {
+      alert(String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(id: number) {
+    if (!confirm("Delete this review?")) return;
+    await api.deleteReview(id);
+    await refresh();
+  }
+
+  return (
+    <section className="bg-surface-container-lowest p-5 rounded-xl space-y-3">
+      <h2 className="font-headline font-bold text-lg">Reviews ({reviews.length})</h2>
+      <div className="space-y-2">
+        {reviews.map((r) => (
+          <div
+            key={r.id}
+            className="bg-surface-container-low p-3 rounded-xl flex items-start gap-3"
+          >
+            <div className="flex-1">
+              <div className="text-xs font-bold uppercase tracking-wide">
+                {r.author} · {"★".repeat(r.rating)}
+              </div>
+              <div className="text-sm text-on-surface-variant italic">"{r.text}"</div>
+            </div>
+            <button
+              onClick={() => remove(r.id)}
+              className="text-error text-xs font-semibold px-2 py-1"
+            >
+              Delete
+            </button>
+          </div>
+        ))}
+        {reviews.length === 0 && (
+          <div className="text-sm text-on-surface-variant">No reviews yet.</div>
+        )}
+      </div>
+
+      <div className="pt-2 space-y-2">
+        <div className="grid grid-cols-3 gap-2">
+          <input
+            className="input col-span-2"
+            placeholder="Author (e.g. Marc D.)"
+            value={author}
+            onChange={(e) => setAuthor(e.target.value)}
+          />
+          <input
+            type="number"
+            min="1"
+            max="5"
+            className="input"
+            value={rating}
+            onChange={(e) => setRating(parseInt(e.target.value) || 5)}
+          />
+        </div>
+        <textarea
+          className="input min-h-[80px]"
+          placeholder="Review text"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+        />
+        <button
+          onClick={add}
+          disabled={busy || !author.trim() || !text.trim()}
+          className="w-full bg-primary text-on-primary rounded-xl py-2.5 font-semibold disabled:opacity-40"
+        >
+          Add review
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function SlotsManager({ practitionerId }: { practitionerId: number }) {
+  const [slots, setSlots] = useState<Slot[]>([]);
+  const [startLocal, setStartLocal] = useState("");
+  const [duration, setDuration] = useState(45);
+  const [booked, setBooked] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  async function refresh() {
+    setSlots(await api.listSlots(practitionerId));
+  }
+  useEffect(() => {
+    refresh();
+  }, [practitionerId]);
+
+  async function add() {
+    if (!startLocal) return;
+    setBusy(true);
+    try {
+      const iso = new Date(startLocal).toISOString();
+      await api.createSlot(practitionerId, {
+        startUtc: iso,
+        durationMinutes: duration,
+        booked,
+      });
+      setStartLocal("");
+      setBooked(false);
+      await refresh();
+    } catch (e) {
+      alert(String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(id: number) {
+    await api.deleteSlot(id);
+    await refresh();
+  }
+
+  return (
+    <section className="bg-surface-container-lowest p-5 rounded-xl space-y-3">
+      <h2 className="font-headline font-bold text-lg">
+        Availability ({slots.length})
+      </h2>
+      <div className="space-y-2 max-h-60 overflow-y-auto">
+        {slots.map((s) => (
+          <div
+            key={s.id}
+            className="bg-surface-container-low p-3 rounded-xl flex items-center gap-3"
+          >
+            <div className="flex-1 text-sm">
+              {new Date(s.startUtc).toLocaleString()} · {s.durationMinutes} min
+              {s.booked && (
+                <span className="ml-2 text-xs bg-error-container text-on-error-container px-2 py-0.5 rounded-full">
+                  booked
+                </span>
+              )}
+            </div>
+            <button
+              onClick={() => remove(s.id)}
+              className="text-error text-xs font-semibold px-2 py-1"
+            >
+              Delete
+            </button>
+          </div>
+        ))}
+        {slots.length === 0 && (
+          <div className="text-sm text-on-surface-variant">No upcoming slots.</div>
+        )}
+      </div>
+
+      <div className="pt-2 space-y-2">
+        <div className="grid grid-cols-3 gap-2">
+          <input
+            type="datetime-local"
+            className="input col-span-2"
+            value={startLocal}
+            onChange={(e) => setStartLocal(e.target.value)}
+          />
+          <input
+            type="number"
+            min="15"
+            step="5"
+            className="input"
+            value={duration}
+            onChange={(e) => setDuration(parseInt(e.target.value) || 45)}
+          />
+        </div>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={booked}
+            onChange={(e) => setBooked(e.target.checked)}
+          />
+          Already booked
+        </label>
+        <button
+          onClick={add}
+          disabled={busy || !startLocal}
+          className="w-full bg-primary text-on-primary rounded-xl py-2.5 font-semibold disabled:opacity-40"
+        >
+          Add slot
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function SkillIconsManager() {
+  const [icons, setIcons] = useState<SkillIcon[]>([]);
+  const [name, setName] = useState("");
+  const [icon, setIcon] = useState("psychology");
+  const [busy, setBusy] = useState(false);
+
+  async function refresh() {
+    setIcons(await api.listSkillIcons());
+  }
+  useEffect(() => {
+    refresh();
+  }, []);
+
+  async function upsert() {
+    if (!name.trim()) return;
+    setBusy(true);
+    try {
+      await api.upsertSkillIcon({ name: name.trim(), icon: icon.trim() || "psychology" });
+      setName("");
+      setIcon("psychology");
+      await refresh();
+    } catch (e) {
+      alert(String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(id: number) {
+    await api.deleteSkillIcon(id);
+    await refresh();
+  }
+
+  return (
+    <section className="bg-surface-container-lowest p-5 rounded-xl space-y-3">
+      <h2 className="font-headline font-bold text-lg">
+        Skill icons ({icons.length})
+      </h2>
+      <p className="text-xs text-on-surface-variant">
+        Map a skill name to a{" "}
+        <a
+          href="https://fonts.google.com/icons"
+          target="_blank"
+          className="text-primary underline"
+          rel="noreferrer"
+        >
+          Material Symbol
+        </a>{" "}
+        name. Used on the practitioner detail page.
+      </p>
+
+      <div className="space-y-2 max-h-60 overflow-y-auto">
+        {icons.map((s) => (
+          <div
+            key={s.id}
+            className="bg-surface-container-low p-3 rounded-xl flex items-center gap-3"
+          >
+            <span className="material-symbols-outlined text-primary">{s.icon}</span>
+            <div className="flex-1">
+              <div className="font-semibold text-sm">{s.name}</div>
+              <div className="text-xs text-on-surface-variant">{s.icon}</div>
+            </div>
+            <button
+              onClick={() => {
+                setName(s.name);
+                setIcon(s.icon);
+              }}
+              className="text-primary text-xs font-semibold px-2 py-1"
+            >
+              Edit
+            </button>
+            <button
+              onClick={() => remove(s.id)}
+              className="text-error text-xs font-semibold px-2 py-1"
+            >
+              Delete
+            </button>
+          </div>
+        ))}
+        {icons.length === 0 && (
+          <div className="text-sm text-on-surface-variant">No mappings yet.</div>
+        )}
+      </div>
+
+      <div className="pt-2 grid grid-cols-2 gap-2">
+        <input
+          className="input"
+          placeholder="Skill name (e.g. burnout)"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
+        <input
+          className="input"
+          placeholder="Material icon (e.g. work_history)"
+          value={icon}
+          onChange={(e) => setIcon(e.target.value)}
+        />
+      </div>
+      <button
+        onClick={upsert}
+        disabled={busy || !name.trim()}
+        className="w-full bg-primary text-on-primary rounded-xl py-2.5 font-semibold disabled:opacity-40"
+      >
+        Save mapping
+      </button>
+    </section>
   );
 }

@@ -1,35 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
-import type { Psychologist } from "../types";
-
-const SKILL_ICONS: Record<string, string> = {
-  stress: "psychology",
-  burnout: "work_history",
-  "burn-out": "work_history",
-  sleep: "bedtime",
-  anxiety: "favorite",
-  panic: "bolt",
-  mindfulness: "self_improvement",
-  cbt: "neurology",
-  adhd: "target",
-  attention: "visibility",
-  "executive-function": "checklist",
-  procrastination: "schedule",
-  "self-esteem": "auto_awesome",
-  adolescent: "school",
-  trauma: "healing",
-  ptsd: "healing",
-  emdr: "remove_red_eye",
-  grief: "sentiment_very_dissatisfied",
-  violence: "shield",
-  attachment: "link",
-  "emotional-regulation": "mood",
-};
-
-function iconFor(skill: string) {
-  return SKILL_ICONS[skill.toLowerCase()] ?? "psychology";
-}
+import type { Psychologist, Review, SkillIcon, Slot } from "../types";
 
 function prettify(skill: string) {
   return skill
@@ -39,12 +11,44 @@ function prettify(skill: string) {
     .join(" ");
 }
 
+function formatHour(iso: string) {
+  const d = new Date(iso);
+  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function formatNext(iso: string) {
+  const d = new Date(iso);
+  const today = new Date();
+  const sameDay =
+    d.getFullYear() === today.getFullYear() &&
+    d.getMonth() === today.getMonth() &&
+    d.getDate() === today.getDate();
+  const time = formatHour(iso);
+  if (sameDay) return `Today, ${time}`;
+  const tomorrow = new Date(today);
+  tomorrow.setDate(today.getDate() + 1);
+  if (
+    d.getFullYear() === tomorrow.getFullYear() &&
+    d.getMonth() === tomorrow.getMonth() &&
+    d.getDate() === tomorrow.getDate()
+  )
+    return `Tomorrow, ${time}`;
+  return `${d.toLocaleDateString([], { weekday: "short", day: "numeric" })}, ${time}`;
+}
+
+const REVIEW_TONES = ["tertiary", "secondary"] as const;
+type Tone = (typeof REVIEW_TONES)[number];
+
 export default function Practitioner() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [p, setP] = useState<Psychologist | null>(null);
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [slots, setSlots] = useState<Slot[]>([]);
+  const [icons, setIcons] = useState<SkillIcon[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
 
   useEffect(() => {
     const pid = Number(id);
@@ -53,12 +57,64 @@ export default function Practitioner() {
       setLoading(false);
       return;
     }
-    api
-      .getPsychologist(pid)
-      .then(setP)
-      .catch((e) => setError(String(e)))
-      .finally(() => setLoading(false));
+    (async () => {
+      try {
+        const [prac, revs, sls, ics] = await Promise.all([
+          api.getPsychologist(pid),
+          api.listReviews(pid),
+          api.listSlots(pid),
+          api.listSkillIcons(),
+        ]);
+        setP(prac);
+        setReviews(revs);
+        setSlots(sls);
+        setIcons(ics);
+      } catch (e) {
+        setError(String(e));
+      } finally {
+        setLoading(false);
+      }
+    })();
   }, [id]);
+
+  const iconMap = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const i of icons) m.set(i.name.toLowerCase(), i.icon);
+    return m;
+  }, [icons]);
+
+  const iconFor = (skill: string) => iconMap.get(skill.toLowerCase()) ?? "psychology";
+
+  const dayGroups = useMemo(() => {
+    const byKey = new Map<string, Slot[]>();
+    for (const s of slots) {
+      const d = new Date(s.startUtc);
+      const key = d.toISOString().slice(0, 10);
+      const arr = byKey.get(key) ?? [];
+      arr.push(s);
+      byKey.set(key, arr);
+    }
+    return Array.from(byKey.entries())
+      .sort(([a], [b]) => (a < b ? -1 : 1))
+      .slice(0, 4);
+  }, [slots]);
+
+  useEffect(() => {
+    if (selectedDay === null && dayGroups.length > 0) {
+      setSelectedDay(dayGroups[0][0]);
+    }
+  }, [dayGroups, selectedDay]);
+
+  const daySlots = useMemo(() => {
+    if (!selectedDay) return [];
+    const found = dayGroups.find(([k]) => k === selectedDay);
+    return found ? found[1] : [];
+  }, [dayGroups, selectedDay]);
+
+  const nextSlot = useMemo(
+    () => slots.find((s) => !s.booked) ?? null,
+    [slots],
+  );
 
   if (loading) {
     return (
@@ -179,31 +235,75 @@ export default function Practitioner() {
             <h3 className="text-on-surface font-headline font-bold text-xl">
               Availability
             </h3>
-            {p.nextAvailable && (
+            {nextSlot && (
+              <span className="text-primary text-sm font-medium">
+                Next: {formatNext(nextSlot.startUtc)}
+              </span>
+            )}
+            {!nextSlot && p.nextAvailable && (
               <span className="text-primary text-sm font-medium">
                 Next: {p.nextAvailable}
               </span>
             )}
           </div>
           <div className="bg-surface-container-lowest rounded-2xl p-6 shadow-sm">
-            <DayGrid />
-            <div className="mt-6 grid grid-cols-3 gap-2">
-              {["09:00", "10:30", "14:00", "15:30", "17:00", "18:30"].map(
-                (slot) => (
-                  <button
-                    key={slot}
-                    className={
-                      "py-2 px-3 text-sm font-medium rounded-lg transition-colors " +
-                      (slot === p.nextAvailable
-                        ? "bg-primary-container text-on-primary-container"
-                        : "border border-outline-variant/20 hover:bg-surface-container-high")
-                    }
-                  >
-                    {slot}
-                  </button>
-                ),
-              )}
-            </div>
+            {dayGroups.length === 0 ? (
+              <p className="text-sm text-on-surface-variant">
+                No upcoming availability.
+              </p>
+            ) : (
+              <>
+                <div className="grid grid-cols-4 gap-3">
+                  {dayGroups.map(([key, list]) => {
+                    const d = new Date(list[0].startUtc);
+                    const active = key === selectedDay;
+                    const names = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
+                    return (
+                      <button
+                        key={key}
+                        onClick={() => setSelectedDay(key)}
+                        className={
+                          "flex flex-col items-center p-3 rounded-xl " +
+                          (active
+                            ? "bg-primary text-on-primary"
+                            : "bg-surface-container-low")
+                        }
+                      >
+                        <span
+                          className={
+                            "text-[10px] uppercase font-bold mb-1 " +
+                            (active ? "opacity-80" : "text-on-surface-variant")
+                          }
+                        >
+                          {names[d.getDay()]}
+                        </span>
+                        <span className="text-lg font-headline font-bold">
+                          {d.getDate()}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="mt-6 grid grid-cols-3 gap-2">
+                  {daySlots.map((s) => (
+                    <button
+                      key={s.id}
+                      disabled={s.booked}
+                      className={
+                        "py-2 px-3 text-sm font-medium rounded-lg transition-colors " +
+                        (s.booked
+                          ? "bg-surface-container-high text-on-surface-variant/50 line-through cursor-not-allowed"
+                          : nextSlot && s.id === nextSlot.id
+                            ? "bg-primary-container text-on-primary-container"
+                            : "border border-outline-variant/20 hover:bg-surface-container-high")
+                      }
+                    >
+                      {formatHour(s.startUtc)}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         </section>
 
@@ -211,23 +311,18 @@ export default function Practitioner() {
           <h3 className="text-on-surface font-headline font-bold text-xl mb-6">
             Patient reviews{" "}
             <span className="text-on-surface-variant font-body font-normal text-sm">
-              ({p.reviewCount})
+              ({reviews.length || p.reviewCount})
             </span>
           </h3>
-          <div className="space-y-4">
-            <Review
-              initials="MD"
-              author="Marc D."
-              text="Exceptional listening skills. I was finally able to put words to my professional burnout."
-              tone="tertiary"
-            />
-            <Review
-              initials="SL"
-              author="Sophie L."
-              text="Very gentle and professional. The teleconsultation format is really convenient."
-              tone="secondary"
-            />
-          </div>
+          {reviews.length === 0 ? (
+            <p className="text-sm text-on-surface-variant">No reviews yet.</p>
+          ) : (
+            <div className="space-y-4">
+              {reviews.map((r, i) => (
+                <ReviewCard key={r.id} r={r} tone={REVIEW_TONES[i % REVIEW_TONES.length]} />
+              ))}
+            </div>
+          )}
         </section>
       </main>
 
@@ -243,53 +338,7 @@ export default function Practitioner() {
   );
 }
 
-function DayGrid() {
-  const today = new Date();
-  const days = Array.from({ length: 4 }, (_, i) => {
-    const d = new Date(today);
-    d.setDate(today.getDate() + i);
-    return d;
-  });
-  const names = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
-  return (
-    <div className="grid grid-cols-4 gap-3">
-      {days.map((d, i) => {
-        const active = i === 1;
-        return (
-          <div
-            key={i}
-            className={
-              "flex flex-col items-center p-3 rounded-xl " +
-              (active ? "bg-primary text-on-primary" : "bg-surface-container-low")
-            }
-          >
-            <span
-              className={
-                "text-[10px] uppercase font-bold mb-1 " +
-                (active ? "opacity-80" : "text-on-surface-variant")
-              }
-            >
-              {names[d.getDay()]}
-            </span>
-            <span className="text-lg font-headline font-bold">{d.getDate()}</span>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function Review({
-  initials,
-  author,
-  text,
-  tone,
-}: {
-  initials: string;
-  author: string;
-  text: string;
-  tone: "tertiary" | "secondary";
-}) {
+function ReviewCard({ r, tone }: { r: Review; tone: Tone }) {
   const chip =
     tone === "tertiary"
       ? "bg-tertiary-container text-on-tertiary-container"
@@ -297,7 +346,7 @@ function Review({
   return (
     <div className="p-6 bg-white rounded-2xl shadow-[0_4px_20px_rgba(49,51,47,0.02)]">
       <div className="flex gap-1 mb-3">
-        {Array.from({ length: 5 }).map((_, i) => (
+        {Array.from({ length: r.rating }).map((_, i) => (
           <span
             key={i}
             className="material-symbols-outlined text-secondary text-sm"
@@ -307,7 +356,7 @@ function Review({
           </span>
         ))}
       </div>
-      <p className="text-on-surface-variant text-sm italic mb-4">"{text}"</p>
+      <p className="text-on-surface-variant text-sm italic mb-4">"{r.text}"</p>
       <div className="flex items-center gap-3">
         <div
           className={
@@ -315,10 +364,10 @@ function Review({
             chip
           }
         >
-          {initials}
+          {r.initials}
         </div>
         <span className="text-xs font-bold text-on-surface uppercase tracking-wider">
-          {author}
+          {r.author}
         </span>
       </div>
     </div>
