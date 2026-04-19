@@ -168,7 +168,10 @@ export default function Home() {
 
 function PractitionerCard({ p }: { p: Psychologist }) {
   return (
-    <div className="bg-surface-container-lowest p-5 rounded-xl flex gap-5 items-center relative overflow-hidden group">
+    <Link
+      to={`/practitioner/${p.id}`}
+      className="bg-surface-container-lowest p-5 rounded-xl flex gap-5 items-center relative overflow-hidden group active:scale-[0.99] transition-transform"
+    >
       <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full -mr-16 -mt-16 group-hover:scale-110 transition-transform duration-500" />
       <div className="w-20 h-20 rounded-2xl overflow-hidden bg-surface-container-low flex-shrink-0">
         {p.photoUrl && (
@@ -204,6 +207,6 @@ function PractitionerCard({ p }: { p: Psychologist }) {
           )}
         </div>
       </div>
-    </div>
+    </Link>
   );
 }

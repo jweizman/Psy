@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Link, useLocation } from "react-router-do
 import Home from "./pages/Home";
 import Chat from "./pages/Chat";
 import Admin from "./pages/Admin";
+import Practitioner from "./pages/Practitioner";
 
 function BottomNav() {
   const { pathname } = useLocation();
@@ -56,6 +57,7 @@ export default function App() {
         <Route path="/" element={<Home />} />
         <Route path="/chat" element={<Chat />} />
         <Route path="/admin" element={<Admin />} />
+        <Route path="/practitioner/:id" element={<Practitioner />} />
       </Routes>
       <BottomNav />
     </BrowserRouter>

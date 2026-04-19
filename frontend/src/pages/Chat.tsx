@@ -105,9 +105,12 @@ export default function Chat() {
                 Next: {match.nextAvailable}
               </p>
             </div>
-            <button className="bg-primary text-on-primary px-4 py-2 rounded-full text-sm font-semibold">
-              Book
-            </button>
+            <Link
+              to={`/practitioner/${match.id}`}
+              className="bg-primary text-on-primary px-4 py-2 rounded-full text-sm font-semibold"
+            >
+              View
+            </Link>
           </div>
         )}
         <div ref={endRef} />
