@@ -1,0 +1,140 @@
+import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
+import { api } from "../api";
+import type { ChatMessage, ChatPhase, Psychologist } from "../types";
+
+export default function Chat() {
+  const [history, setHistory] = useState<ChatMessage[]>([
+    {
+      role: "assistant",
+      content:
+        "Bonjour. Racontez-moi, en quelques mots, ce qui vous amène aujourd'hui.",
+    },
+  ]);
+  const [phase, setPhase] = useState<ChatPhase>("initial");
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [match, setMatch] = useState<Psychologist | null>(null);
+  const endRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [history, loading]);
+
+  async function send() {
+    const text = input.trim();
+    if (!text || loading || phase === "done") return;
+    const newHistory: ChatMessage[] = [...history, { role: "user", content: text }];
+    setHistory(newHistory);
+    setInput("");
+    setLoading(true);
+    try {
+      const res = await api.chat(newHistory, phase);
+      setHistory([...newHistory, { role: "assistant", content: res.reply }]);
+      setPhase(res.phase);
+      if (res.matchedPsychologistId) {
+        try {
+          const p = await api.getPsychologist(res.matchedPsychologistId);
+          setMatch(p);
+        } catch {
+          /* ignore */
+        }
+      }
+    } catch (e) {
+      setHistory([
+        ...newHistory,
+        {
+          role: "assistant",
+          content:
+            "Désolé, une erreur est survenue. Vérifiez que le serveur est lancé et que la clé API est configurée.",
+        },
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="bg-background text-on-surface min-h-screen">
+      <header className="fixed top-0 w-full z-40 bg-[#fbf9f5]/80 backdrop-blur-xl">
+        <div className="flex items-center gap-3 px-6 h-16 w-full max-w-lg mx-auto">
+          <Link to="/" className="text-primary">
+            <span className="material-symbols-outlined">arrow_back</span>
+          </Link>
+          <h1 className="font-headline font-bold tracking-tight text-xl text-on-surface">
+            Matching
+          </h1>
+        </div>
+      </header>
+
+      <main className="pt-20 pb-32 max-w-lg mx-auto px-6 space-y-3">
+        {history.map((m, i) => (
+          <Bubble key={i} role={m.role} content={m.content} />
+        ))}
+        {loading && <Bubble role="assistant" content="…" />}
+        {match && (
+          <div className="bg-surface-container-lowest p-5 rounded-xl flex gap-4 items-center mt-4 shadow-[0_10px_30px_rgba(49,51,47,0.06)]">
+            {match.photoUrl && (
+              <img
+                src={match.photoUrl}
+                alt={match.name}
+                className="w-16 h-16 rounded-2xl object-cover"
+              />
+            )}
+            <div className="flex-1">
+              <h3 className="font-headline font-bold text-lg">{match.name}</h3>
+              <p className="text-on-surface-variant text-sm">{match.title}</p>
+              <p className="text-xs text-on-surface-variant mt-1">
+                Next: {match.nextAvailable}
+              </p>
+            </div>
+            <button className="bg-primary text-on-primary px-4 py-2 rounded-full text-sm font-semibold">
+              Book
+            </button>
+          </div>
+        )}
+        <div ref={endRef} />
+      </main>
+
+      <div className="fixed bottom-20 w-full z-40 bg-[#fbf9f5]/80 backdrop-blur-xl">
+        <div className="max-w-lg mx-auto px-6 py-3 flex gap-2 items-center">
+          <input
+            className="flex-1 h-12 px-4 bg-surface-container-highest rounded-xl outline-none focus:ring-2 focus:ring-primary/40 text-on-surface placeholder:text-on-surface-variant/50"
+            placeholder={phase === "done" ? "Session terminée" : "Votre message…"}
+            value={input}
+            disabled={phase === "done" || loading}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") send();
+            }}
+          />
+          <button
+            onClick={send}
+            disabled={phase === "done" || loading || !input.trim()}
+            className="w-12 h-12 rounded-full bg-primary text-on-primary flex items-center justify-center disabled:opacity-40"
+          >
+            <span className="material-symbols-outlined">send</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Bubble({ role, content }: { role: "user" | "assistant"; content: string }) {
+  const mine = role === "user";
+  return (
+    <div className={"flex " + (mine ? "justify-end" : "justify-start")}>
+      <div
+        className={
+          "max-w-[85%] px-4 py-3 rounded-2xl font-body text-sm leading-relaxed " +
+          (mine
+            ? "bg-primary text-on-primary rounded-br-sm"
+            : "bg-surface-container-high text-on-surface rounded-bl-sm")
+        }
+      >
+        {content}
+      </div>
+    </div>
+  );
+}
