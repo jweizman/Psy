@@ -111,6 +111,7 @@ public class MatchingService
         foreach (var p in psys)
         {
             catalog.AppendLine($"- id={p.Id} | {p.Name} | {p.Title}");
+            catalog.AppendLine($"  next_available: {p.NextAvailable}");
             catalog.AppendLine($"  skills: {p.SkillsCsv}");
             catalog.AppendLine($"  bio: {p.Bio}");
         }
@@ -121,16 +122,24 @@ public class MatchingService
 
             {{catalog}}
 
-            Based ONLY on the user's concern and the bios/skills above,
-            decide whether there is a good match.
+            Your job: given the user's concern, pick AT MOST ONE practitioner whose
+            bio/skills explicitly address what the user described. If nothing in any
+            bio genuinely covers the concern, return null — do not force a match.
 
             Respond STRICTLY as valid JSON, with no surrounding text, in this shape:
-            {"match_id": <int or null>, "reasoning": "<1-2 sentences in English explaining the choice, addressed to the user>"}
+            {"match_id": <int or null>, "reasoning": "<2-3 sentences addressed to the user>"}
 
-            Rules:
-            - match_id = null if NO psychologist reasonably covers the concern.
-            - Never force a match when the bios contain nothing relevant.
-            - reasoning: warm, concrete, brief; address the user in the second person.
+            Rules for `reasoning`:
+            - Start by naming the practitioner and their specialty.
+            - Then ground the recommendation in SPECIFIC wording pulled from that
+              practitioner's bio or skills (e.g. "Their bio mentions X, which fits
+              what you described about Y"). The link between the user's concern and
+              the bio must be explicit.
+            - End with a concrete next step (e.g. "Would you like me to book their
+              next slot at <NextAvailable>?").
+            - Warm, second person, brief. No invented credentials.
+            - If match_id is null, explain briefly why no one in the list fits and
+              invite the user to add detail.
             """;
 
         var msgs = history.Select(m => (m.Role, m.Content));
