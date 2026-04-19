@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Psy.Api.Models;
 
 namespace Psy.Api.Data;
@@ -7,6 +8,7 @@ public static class SeedData
     public static void EnsureSeeded(AppDbContext db)
     {
         db.Database.EnsureCreated();
+        EnsureLegacyTables(db);
 
         if (!db.SkillIcons.Any())
         {
@@ -107,5 +109,37 @@ public static class SeedData
         }
 
         db.SaveChanges();
+    }
+
+    private static void EnsureLegacyTables(AppDbContext db)
+    {
+        db.Database.ExecuteSqlRaw("""
+            CREATE TABLE IF NOT EXISTS "SkillIcons" (
+                "Id" INTEGER NOT NULL CONSTRAINT "PK_SkillIcons" PRIMARY KEY AUTOINCREMENT,
+                "Name" TEXT NOT NULL,
+                "Icon" TEXT NOT NULL
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS "IX_SkillIcons_Name" ON "SkillIcons" ("Name");
+
+            CREATE TABLE IF NOT EXISTS "Reviews" (
+                "Id" INTEGER NOT NULL CONSTRAINT "PK_Reviews" PRIMARY KEY AUTOINCREMENT,
+                "PsychologistId" INTEGER NOT NULL,
+                "Author" TEXT NOT NULL,
+                "Initials" TEXT NULL,
+                "Rating" INTEGER NOT NULL,
+                "Text" TEXT NOT NULL,
+                "CreatedAt" TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS "IX_Reviews_PsychologistId" ON "Reviews" ("PsychologistId");
+
+            CREATE TABLE IF NOT EXISTS "Slots" (
+                "Id" INTEGER NOT NULL CONSTRAINT "PK_Slots" PRIMARY KEY AUTOINCREMENT,
+                "PsychologistId" INTEGER NOT NULL,
+                "StartUtc" TEXT NOT NULL,
+                "DurationMinutes" INTEGER NOT NULL,
+                "Booked" INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS "IX_Slots_PsychologistId_StartUtc" ON "Slots" ("PsychologistId", "StartUtc");
+            """);
     }
 }
