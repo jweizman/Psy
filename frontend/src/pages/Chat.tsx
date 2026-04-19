@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { api } from "../api";
 import type { ChatMessage, ChatPhase, Psychologist } from "../types";
 
@@ -16,21 +16,32 @@ export default function Chat() {
   const [loading, setLoading] = useState(false);
   const [match, setMatch] = useState<Psychologist | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
+  const location = useLocation();
+  const initialSentRef = useRef(false);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [history, loading]);
 
-  async function send() {
-    const text = input.trim();
-    if (!text || loading || phase === "done") return;
-    const newHistory: ChatMessage[] = [...history, { role: "user", content: text }];
-    setHistory(newHistory);
-    setInput("");
+  useEffect(() => {
+    if (initialSentRef.current) return;
+    const state = location.state as { initialMessage?: string } | null;
+    const seed = state?.initialMessage?.trim();
+    if (!seed) return;
+    initialSentRef.current = true;
+    void sendText(seed);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state]);
+
+  async function sendText(text: string) {
+    const t = text.trim();
+    if (!t || loading || phase === "done") return;
+    const nextHistory: ChatMessage[] = [...history, { role: "user", content: t }];
+    setHistory(nextHistory);
     setLoading(true);
     try {
-      const res = await api.chat(newHistory, phase);
-      setHistory([...newHistory, { role: "assistant", content: res.reply }]);
+      const res = await api.chat(nextHistory, phase);
+      setHistory([...nextHistory, { role: "assistant", content: res.reply }]);
       setPhase(res.phase);
       if (res.matchedPsychologistId) {
         try {
@@ -40,9 +51,9 @@ export default function Chat() {
           /* ignore */
         }
       }
-    } catch (e) {
+    } catch {
       setHistory([
-        ...newHistory,
+        ...nextHistory,
         {
           role: "assistant",
           content:
@@ -52,6 +63,12 @@ export default function Chat() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function send() {
+    const text = input;
+    setInput("");
+    await sendText(text);
   }
 
   return (

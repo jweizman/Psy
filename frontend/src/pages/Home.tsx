@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import type { Psychologist } from "../types";
 
@@ -10,6 +10,13 @@ export default function Home() {
   const [filter, setFilter] = useState("All");
   const [list, setList] = useState<Psychologist[]>([]);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
+
+  function openChatWith(text: string) {
+    const t = text.trim();
+    if (!t) return;
+    navigate("/chat", { state: { initialMessage: t } });
+  }
 
   useEffect(() => {
     api
@@ -76,7 +83,18 @@ export default function Home() {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") openChatWith(search);
+              }}
             />
+            {search.trim() && (
+              <button
+                onClick={() => openChatWith(search)}
+                className="absolute inset-y-0 right-2 my-2 px-4 bg-primary text-on-primary rounded-lg text-sm font-semibold"
+              >
+                Talk to us
+              </button>
+            )}
           </div>
         </section>
 
