@@ -96,9 +96,7 @@ public class MatchingService
 
     private async Task<ChatResponse> MatchAsync(List<ChatMessage> history, CancellationToken ct)
     {
-        var psys = await _db.Psychologists
-            .Where(p => p.AvailableToday)
-            .ToListAsync(ct);
+        var psys = await _db.Psychologists.ToListAsync(ct);
 
         if (psys.Count == 0)
         {
@@ -118,7 +116,7 @@ public class MatchingService
 
         var system = $$"""
             You are a matching assistant for a psychology platform.
-            Here is the list of psychologists AVAILABLE TODAY:
+            Here is the list of psychologists on the platform:
 
             {{catalog}}
 
