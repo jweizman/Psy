@@ -1,0 +1,17 @@
+**/bin/
+**/obj/
+**/node_modules/
+**/dist/
+**/.vs/
+**/.vscode/
+**/.idea/
+**/*.user
+**/*.suo
+**/*.db
+**/*.db-shm
+**/*.db-wal
+**/*.log
+.git/
+.gitignore
+frontend/
+README.md
